@@ -127,8 +127,11 @@ class ToshibaAcDeviceManager:
         if not self.http_api:
             raise ToshibaAcDeviceManagerError("Not connected")
 
-        consumptions = await self.http_api.get_devices_energy_consumption(
-            [ac_unique_id for ac_unique_id in self.devices.keys()]
+        ac_unique_ids = [ac_unique_id for ac_unique_id in self.devices.keys()]
+
+        consumptions, daily_consumptions = await asyncio.gather(
+            self.http_api.get_devices_energy_consumption(ac_unique_ids),
+            self.http_api.get_devices_daily_energy_consumption(ac_unique_ids),
         )
 
         logger.debug(
@@ -140,11 +143,22 @@ class ToshibaAcDeviceManager:
             + "}"
         )
 
+        logger.debug(
+            "Daily power consumption for devices: {"
+            + " ,".join(
+                f"{self.devices[ac_unique_id].name}: {consumption.total_energy_wh}Wh"
+                for ac_unique_id, consumption in daily_consumptions.items()
+            )
+            + "}"
+        )
+
         updates = []
 
         for ac_unique_id, consumption in consumptions.items():
-            update = self.devices[ac_unique_id].handle_update_ac_energy_consumption(consumption)
-            updates.append(update)
+            updates.append(self.devices[ac_unique_id].handle_update_ac_energy_consumption(consumption))
+
+        for ac_unique_id, consumption in daily_consumptions.items():
+            updates.append(self.devices[ac_unique_id].handle_update_ac_daily_energy_consumption(consumption))
 
         await asyncio.gather(*updates)
 

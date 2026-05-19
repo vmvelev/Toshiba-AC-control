@@ -24,6 +24,7 @@ from toshiba_ac.device.fcu_state import ToshibaAcFcuState
 from toshiba_ac.device.features import ToshibaAcFeatures
 from toshiba_ac.device.properties import (
     ToshibaAcAirPureIon,
+    ToshibaAcDeviceDailyEnergyConsumption,
     ToshibaAcDeviceEnergyConsumption,
     ToshibaAcFanMode,
     ToshibaAcMeritA,
@@ -80,7 +81,9 @@ class ToshibaAcDevice:
         self._supported = ToshibaAcFeatures.from_merit_string_and_model(merit_feature, ac_model_id)
         self._on_state_changed_callback = ToshibaAcDeviceCallback()
         self._on_energy_consumption_changed_callback = ToshibaAcDeviceCallback()
+        self._on_daily_energy_consumption_changed_callback = ToshibaAcDeviceCallback()
         self._ac_energy_consumption: t.Optional[ToshibaAcDeviceEnergyConsumption] = None
+        self._ac_daily_energy_consumption: t.Optional[ToshibaAcDeviceDailyEnergyConsumption] = None
         self.periodic_reload_state_task: t.Optional[asyncio.Task[None]] = None
         self.load_additional_device_info_task: t.Optional[asyncio.Task[None]] = None
 
@@ -157,6 +160,17 @@ class ToshibaAcDevice:
             logger.debug(f"[{self.name}] New energy consumption: {val.energy_wh}Wh")
 
             await self.on_energy_consumption_changed_callback(self)
+
+    async def handle_update_ac_daily_energy_consumption(self, val: ToshibaAcDeviceDailyEnergyConsumption) -> None:
+        if self._ac_daily_energy_consumption != val:
+            self._ac_daily_energy_consumption = val
+
+            logger.debug(
+                f"[{self.name}] New daily energy consumption: {val.total_energy_wh}Wh "
+                f"(current hour: {val.current_hour_energy_wh}Wh)"
+            )
+
+            await self.on_daily_energy_consumption_changed_callback(self)
 
     async def send_state_to_ac(self, state: ToshibaAcFcuState) -> None:
         future_state = ToshibaAcFcuState.from_hex_state(self.fcu_state.encode())
@@ -366,12 +380,20 @@ class ToshibaAcDevice:
         return self._ac_energy_consumption
 
     @property
+    def ac_daily_energy_consumption(self) -> t.Optional[ToshibaAcDeviceDailyEnergyConsumption]:
+        return self._ac_daily_energy_consumption
+
+    @property
     def on_state_changed_callback(self) -> ToshibaAcDeviceCallback:
         return self._on_state_changed_callback
 
     @property
     def on_energy_consumption_changed_callback(self) -> ToshibaAcDeviceCallback:
         return self._on_energy_consumption_changed_callback
+
+    @property
+    def on_daily_energy_consumption_changed_callback(self) -> ToshibaAcDeviceCallback:
+        return self._on_daily_energy_consumption_changed_callback
 
     @property
     def supported(self) -> ToshibaAcFeatures:

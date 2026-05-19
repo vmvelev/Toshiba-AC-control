@@ -20,7 +20,11 @@ import typing as t
 from dataclasses import dataclass
 
 import aiohttp
-from toshiba_ac.device.properties import ToshibaAcDeviceEnergyConsumption
+from toshiba_ac.device.properties import (
+    ToshibaAcDeviceDailyEnergyConsumption,
+    ToshibaAcDeviceEnergyConsumption,
+    ToshibaAcDeviceEnergyConsumptionBucket,
+)
 from toshiba_ac.utils import RetryJitterMode, retry_on_exception
 
 logger = logging.getLogger(__name__)
@@ -297,33 +301,101 @@ class ToshibaAcHttpApi:
 
         return ToshibaAcDeviceAdditionalInfo(cdu=cdu, fcu=fcu)
 
-    async def get_devices_energy_consumption(
-        self, ac_unique_ids: t.List[str]
-    ) -> t.Dict[str, ToshibaAcDeviceEnergyConsumption]:
-        year = int(datetime.datetime.now().year)
-        since = datetime.datetime(year, 1, 1).astimezone(datetime.timezone.utc)
+    @staticmethod
+    def _format_api_utc_time(value: datetime.datetime) -> str:
+        value = value.astimezone(datetime.timezone.utc)
+        return f"{value.strftime('%Y-%m-%dT%H:%M:%S')}.{value.microsecond:07d}Z"
 
+    @staticmethod
+    def _parse_energy_wh(energy: t.Any) -> float:
+        # Cloud data may contain invalid negative values; clamp to zero.
+        return float(max(0, int(energy)))
+
+    async def _get_group_ac_energy_consumption(
+        self,
+        ac_unique_ids: t.List[str],
+        energy_type: str,
+        from_utc_time: str,
+        to_utc_time: str,
+        timezone: str,
+    ) -> t.List[t.Dict[str, t.Any]]:
         post = {
             "ACDeviceUniqueIdList": ac_unique_ids,
-            "FromUtcTime": str(year),
-            "Timezone": "UTC",
-            "ToUtcTime": str(year + 1),
-            "Type": "EnergyYear",
+            "FromUtcTime": from_utc_time,
+            "Timezone": timezone,
+            "ToUtcTime": to_utc_time,
+            "Type": energy_type,
         }
 
         res = await self.request_api(self.AC_ENERGY_CONSUMPTION_PATH, post=post)
 
-        ret = {}
+        if not isinstance(res, list):
+            return []
 
-        try:
-            for ac in res:
-                try:
-                    consumption = sum(int(consumption["Energy"]) for consumption in ac["EnergyConsumption"])
-                    ret[ac["ACDeviceUniqueId"]] = ToshibaAcDeviceEnergyConsumption(consumption, since)
-                except (KeyError, ValueError):
-                    pass
-        except TypeError:
-            pass
+        return [ac for ac in res if isinstance(ac, dict)]
+
+    async def get_devices_energy_consumption(
+        self, ac_unique_ids: t.List[str]
+    ) -> t.Dict[str, ToshibaAcDeviceEnergyConsumption]:
+        year = int(datetime.datetime.now().year)
+        since = datetime.datetime(year, 1, 1, tzinfo=datetime.timezone.utc)
+
+        acs = await self._get_group_ac_energy_consumption(
+            ac_unique_ids,
+            "EnergyYear",
+            str(year),
+            str(year + 1),
+            "UTC",
+        )
+
+        ret: t.Dict[str, ToshibaAcDeviceEnergyConsumption] = {}
+
+        for ac in acs:
+            try:
+                consumption = sum(
+                    self._parse_energy_wh(entry["Energy"]) for entry in ac["EnergyConsumption"]
+                )
+                ret[ac["ACDeviceUniqueId"]] = ToshibaAcDeviceEnergyConsumption(consumption, since)
+            except (KeyError, ValueError, TypeError):
+                pass
+
+        return ret
+
+    async def get_devices_daily_energy_consumption(
+        self,
+        ac_unique_ids: t.List[str],
+        day: t.Optional[datetime.date] = None,
+        timezone: str = "UTC",
+    ) -> t.Dict[str, ToshibaAcDeviceDailyEnergyConsumption]:
+        """Fetch hourly energy consumption buckets for one calendar day."""
+        if day is None:
+            day = datetime.datetime.now(datetime.timezone.utc).date()
+
+        since = datetime.datetime(day.year, day.month, day.day, tzinfo=datetime.timezone.utc)
+        until = since + datetime.timedelta(days=1) - datetime.timedelta(microseconds=1)
+
+        acs = await self._get_group_ac_energy_consumption(
+            ac_unique_ids,
+            "EnergyDay",
+            self._format_api_utc_time(since),
+            self._format_api_utc_time(until),
+            timezone,
+        )
+
+        ret: t.Dict[str, ToshibaAcDeviceDailyEnergyConsumption] = {}
+
+        for ac in acs:
+            try:
+                buckets = tuple(
+                    ToshibaAcDeviceEnergyConsumptionBucket(
+                        hour=int(entry["Time"]),
+                        energy_wh=self._parse_energy_wh(entry["Energy"]),
+                    )
+                    for entry in sorted(ac["EnergyConsumption"], key=lambda e: int(e["Time"]))
+                )
+                ret[ac["ACDeviceUniqueId"]] = ToshibaAcDeviceDailyEnergyConsumption(since, buckets)
+            except (KeyError, ValueError, TypeError):
+                pass
 
         return ret
 

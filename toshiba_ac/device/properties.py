@@ -18,10 +18,45 @@ from datetime import datetime
 from enum import Enum, auto
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToshibaAcDeviceEnergyConsumption:
     energy_wh: float
     since: datetime
+
+
+@dataclass(frozen=True)
+class ToshibaAcDeviceEnergyConsumptionBucket:
+    """Hourly energy use for one hour of the day (API Time field is 1-24)."""
+
+    hour: int
+    energy_wh: float
+
+
+@dataclass(frozen=True)
+class ToshibaAcDeviceDailyEnergyConsumption:
+    """Per-hour energy consumption for a single calendar day."""
+
+    since: datetime
+    buckets: tuple[ToshibaAcDeviceEnergyConsumptionBucket, ...]
+
+    @property
+    def total_energy_wh(self) -> float:
+        return sum(bucket.energy_wh for bucket in self.buckets)
+
+    def energy_wh_for_hour(self, hour: int) -> float | None:
+        """Return energy for API hour bucket (1-24)."""
+        for bucket in self.buckets:
+            if bucket.hour == hour:
+                return bucket.energy_wh
+        return None
+
+    @property
+    def current_hour_energy_wh(self) -> float | None:
+        """Energy consumed in the current hour of day, if data is for today."""
+        now = datetime.now(tz=self.since.tzinfo)
+        if now.date() != self.since.date():
+            return None
+        return self.energy_wh_for_hour(now.hour + 1)
 
 
 class ToshibaAcStatus(Enum):
