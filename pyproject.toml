@@ -1,8 +1,39 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
+requires = ["setuptools>=61", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toshiba-ac-community"
+description = "Community fork: control Toshiba HVAC systems with WiFi"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+    { name = "Kamil Sroka", email = "kamilsroka92@gmail.com" },
+    { name = "Venelin Velev" },
 ]
+keywords = ["toshiba", "ac", "hvac"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+dynamic = ["version"]
+dependencies = [
+    "azure-iot-device==2.15.0rc1",
+    "aiohttp>=3.8.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/vmvelev/Toshiba-AC-control"
+"Bug Tracker" = "https://github.com/vmvelev/Toshiba-AC-control/issues"
+
+[tool.setuptools.packages.find]
+include = ["toshiba_ac*"]
+
+[tool.setuptools_scm]
+# version derived from git tags (tag prefix "v"); no version file vendored
 
 [tool.black]
 line-length = 120
@@ -13,4 +44,4 @@ warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_calls = true
 disallow_untyped_defs = true
-exclude = 'setup.py|versioneer.py|toshiba_ac/_version.py|samples'
+exclude = 'samples'

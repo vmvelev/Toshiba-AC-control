@@ -1,3 +1,6 @@
-from . import _version
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = _version.get_versions()["version"]
+try:
+    __version__ = version("toshiba-ac-community")
+except PackageNotFoundError:  # running from a source tree without install
+    __version__ = "0.0.0"
