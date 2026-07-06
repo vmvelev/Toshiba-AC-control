@@ -185,10 +185,14 @@ class ToshibaAcHttpApi:
                     raise ToshibaAcHttpApiError(json["Message"])
 
             response_text = await response.text()
-            logger.warning(
+            # 403 is Toshiba's WAF/rate-limit — expected and retried by the decorator above,
+            # and AMQP push keeps state fresh regardless, so keep it out of the default WARNING log.
+            level = logging.INFO if response.status == 403 else logging.WARNING
+            logger.log(
+                level,
                 "Non-200 response from Toshiba API "
                 f"(status={response.status}, path={path}, content_type={response.headers.get('Content-Type')}, "
-                f"server={response.headers.get('Server')})"
+                f"server={response.headers.get('Server')})",
             )
             logger.debug(f"Non-200 response body for {path} (first 500 chars): {response_text[:500]}")
 

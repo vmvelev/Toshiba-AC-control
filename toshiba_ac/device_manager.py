@@ -118,7 +118,8 @@ class ToshibaAcDeviceManager:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.error(f"Fetching energy consumption failed: {e}")
+                # Best-effort periodic poll; not an error when it eventually recovers
+                logger.warning(f"Fetching energy consumption failed: {e}")
                 pass
 
             await async_sleep_until_next_multiply_of_minutes(self.FETCH_ENERGY_CONSUMPTION_PERIOD_MINUTES)

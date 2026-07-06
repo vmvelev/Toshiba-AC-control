@@ -131,7 +131,8 @@ class ToshibaAcDevice:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.error(f"State reload failed: {e}")
+                # Best-effort periodic poll; AMQP push still delivers state, so not an error
+                logger.warning(f"State reload failed: {e}")
                 pass
 
     async def handle_cmd_fcu_from_ac(self, payload: dict[str, JSONSerializable]) -> None:
