@@ -100,3 +100,9 @@ class ToshibaAcSelfCleaning(Enum):
     ON = auto()
     OFF = auto()
     NONE = None
+
+
+class ToshibaAcWirelessLed(Enum):
+    ON = auto()
+    OFF = auto()
+    NONE = None

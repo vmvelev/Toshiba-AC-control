@@ -33,6 +33,7 @@ from toshiba_ac.device.properties import (
     ToshibaAcSelfCleaning,
     ToshibaAcStatus,
     ToshibaAcSwingMode,
+    ToshibaAcWirelessLed,
 )
 from toshiba_ac.utils import async_sleep_until_next_multiply_of_minutes, pretty_enum_name, ToshibaAcCallback
 from toshiba_ac.utils.amqp_api import ToshibaAcAmqpApi, JSONSerializable
@@ -228,6 +229,13 @@ class ToshibaAcDevice:
 
             state.ac_self_cleaning = ToshibaAcSelfCleaning.NONE
 
+        # Wireless LED support is not in the merit feature string; a device that has it reports
+        # its current value in the state, so "never reported" is the only unsupported signal we have.
+        if state.ac_wireless_led != ToshibaAcWirelessLed.NONE and self.ac_wireless_led == ToshibaAcWirelessLed.NONE:
+            logger.warning(f"[{self.name}] Trying to set unsupported ac wireless led")
+
+            state.ac_wireless_led = ToshibaAcWirelessLed.NONE
+
         # If we are requesting to turn on, we have to clear self cleaning flag
         if state.ac_status == ToshibaAcStatus.ON and self.ac_self_cleaning == ToshibaAcSelfCleaning.ON:
             state.ac_self_cleaning = ToshibaAcSelfCleaning.OFF
@@ -361,6 +369,16 @@ class ToshibaAcDevice:
     @property
     def ac_self_cleaning(self) -> ToshibaAcSelfCleaning:
         return self.fcu_state.ac_self_cleaning
+
+    @property
+    def ac_wireless_led(self) -> ToshibaAcWirelessLed:
+        return self.fcu_state.ac_wireless_led
+
+    async def set_ac_wireless_led(self, val: ToshibaAcWirelessLed) -> None:
+        state = ToshibaAcFcuState()
+        state.ac_wireless_led = val
+
+        await self.send_state_to_ac(state)
 
     @property
     def ac_energy_consumption(self) -> t.Optional[ToshibaAcDeviceEnergyConsumption]:

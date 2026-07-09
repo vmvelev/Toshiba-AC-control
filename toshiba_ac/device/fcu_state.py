@@ -25,6 +25,7 @@ from toshiba_ac.device.properties import (
     ToshibaAcMode,
     ToshibaAcPowerSelection,
     ToshibaAcSelfCleaning,
+    ToshibaAcWirelessLed,
     ToshibaAcStatus,
     ToshibaAcSwingMode,
 )
@@ -257,6 +258,23 @@ class ToshibaAcFcuState:
                 ToshibaAcSelfCleaning.NONE: ToshibaAcFcuState.NONE_VAL,
             }[self_cleaning]
 
+    class AcWirelessLed:
+        @staticmethod
+        def from_raw(raw: int) -> ToshibaAcWirelessLed:
+            return {
+                0x01: ToshibaAcWirelessLed.ON,
+                0x02: ToshibaAcWirelessLed.OFF,
+                ToshibaAcFcuState.NONE_VAL: ToshibaAcWirelessLed.NONE,
+            }[raw]
+
+        @staticmethod
+        def to_raw(wireless_led: ToshibaAcWirelessLed) -> int:
+            return {
+                ToshibaAcWirelessLed.ON: 0x01,
+                ToshibaAcWirelessLed.OFF: 0x02,
+                ToshibaAcWirelessLed.NONE: ToshibaAcFcuState.NONE_VAL,
+            }[wireless_led]
+
     @classmethod
     def from_hex_state(cls, hex_state: str) -> ToshibaAcFcuState:
         state = cls()
@@ -276,6 +294,7 @@ class ToshibaAcFcuState:
         self._ac_indoor_temperature = ToshibaAcFcuState.NONE_VAL_SIGNED
         self._ac_outdoor_temperature = ToshibaAcFcuState.NONE_VAL_SIGNED
         self._ac_self_cleaning = ToshibaAcFcuState.NONE_VAL
+        self._ac_wireless_led = ToshibaAcFcuState.NONE_VAL
 
     def encode(self) -> str:
         encoded = self.ENCODING_STRUCT.pack(
@@ -295,7 +314,7 @@ class ToshibaAcFcuState:
             ToshibaAcFcuState.NONE_VAL,
             ToshibaAcFcuState.NONE_VAL,
             self._ac_self_cleaning,
-            ToshibaAcFcuState.NONE_VAL,
+            self._ac_wireless_led,
             ToshibaAcFcuState.NONE_VAL,
             ToshibaAcFcuState.NONE_VAL,
             ToshibaAcFcuState.NONE_VAL,
@@ -327,6 +346,7 @@ class ToshibaAcFcuState:
             _,
             _,
             self._ac_self_cleaning,
+            self._ac_wireless_led,
             *_,
         ) = data
 
@@ -345,6 +365,7 @@ class ToshibaAcFcuState:
             "_ac_merit_a",
             "_ac_air_pure_ion",
             "_ac_self_cleaning",
+            "_ac_wireless_led",
         ]
 
         temperature_states = [
@@ -478,6 +499,14 @@ class ToshibaAcFcuState:
     def ac_self_cleaning(self, val: ToshibaAcSelfCleaning) -> None:
         self._ac_self_cleaning = ToshibaAcFcuState.AcSelfCleaning.to_raw(val)
 
+    @property
+    def ac_wireless_led(self) -> ToshibaAcWirelessLed:
+        return ToshibaAcFcuState.AcWirelessLed.from_raw(self._ac_wireless_led)
+
+    @ac_wireless_led.setter
+    def ac_wireless_led(self, val: ToshibaAcWirelessLed) -> None:
+        self._ac_wireless_led = ToshibaAcFcuState.AcWirelessLed.to_raw(val)
+
     def __str__(self) -> str:
         res = f"AcStatus: {self.ac_status.name}"
         res += f", AcMode: {self.ac_mode.name}"
@@ -491,5 +520,6 @@ class ToshibaAcFcuState:
         res += f", AcIndoorAcTemperature: {self.ac_indoor_temperature}"
         res += f", AcOutdoorAcTemperature: {self.ac_outdoor_temperature}"
         res += f", AcSelfCleaning: {self.ac_self_cleaning.name}"
+        res += f", AcWirelessLed: {self.ac_wireless_led.name}"
 
         return res
