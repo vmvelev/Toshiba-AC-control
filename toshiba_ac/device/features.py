@@ -191,6 +191,7 @@ class ToshibaAcFeatures:
                 s_ac_swing_mode.append(ToshibaAcSwingMode.FIXED_3)
                 s_ac_swing_mode.append(ToshibaAcSwingMode.FIXED_4)
                 s_ac_swing_mode.append(ToshibaAcSwingMode.FIXED_5)
+                s_ac_swing_mode.append(ToshibaAcSwingMode.HADA)
 
             if merit_bits[15]:
                 s_ac_energy_report = True

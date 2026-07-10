@@ -133,6 +133,7 @@ class ToshibaAcFcuState:
                 0x52: ToshibaAcSwingMode.FIXED_3,
                 0x53: ToshibaAcSwingMode.FIXED_4,
                 0x54: ToshibaAcSwingMode.FIXED_5,
+                0x60: ToshibaAcSwingMode.HADA,
                 0x00: ToshibaAcSwingMode.NONE,
                 ToshibaAcFcuState.NONE_VAL: ToshibaAcSwingMode.NONE,
             }[raw]
@@ -149,6 +150,7 @@ class ToshibaAcFcuState:
                 ToshibaAcSwingMode.FIXED_3: 0x52,
                 ToshibaAcSwingMode.FIXED_4: 0x53,
                 ToshibaAcSwingMode.FIXED_5: 0x54,
+                ToshibaAcSwingMode.HADA: 0x60,
                 ToshibaAcSwingMode.NONE: ToshibaAcFcuState.NONE_VAL,
             }[swing_mode]
 
