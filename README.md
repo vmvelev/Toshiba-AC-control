@@ -17,6 +17,8 @@ Originally created by [Kamil Sroka (KaSroka)](https://github.com/KaSroka/Toshiba
 pip3 install toshiba-ac-community
 ```
 
+Requires Python 3.10 or newer.
+
 > Note: this package pins the pre-release `azure-iot-device==2.15.0rc1`. Installers that refuse pre-release transitive dependencies (e.g. `uv`) need `azure-iot-device==2.15.0rc1` installed first, or pre-releases enabled.
 
 ### Installation for development
@@ -27,16 +29,26 @@ pip3 install toshiba-ac-community
 
 2. Install the package (editable if you want to edit the code):
 
-    `pip3 install -e .`
+    `cd Toshiba-AC-control && pip3 install -e .`
 
 ## Usage
 
 ```python
+import asyncio
+
 from toshiba_ac.device_manager import ToshibaAcDeviceManager
 
-device_manager = ToshibaAcDeviceManager(username, password)
-sas_token = await device_manager.connect()
-devices = await device_manager.get_devices()
+
+async def main():
+    # Must be constructed inside a running event loop
+    device_manager = ToshibaAcDeviceManager(username, password)
+    sas_token = await device_manager.connect()
+    devices = await device_manager.get_devices()
+    ...
+    await device_manager.shutdown()
+
+
+asyncio.run(main())
 ```
 
 ## Sample script
@@ -46,7 +58,7 @@ Sample GUI application `samples/toshiba_ac_gui.py` demonstrates usage of this pa
 It requires env variables with login information:
 
 ```
-TOSHIBA_USER=<USER_NAME> TOSHIBA_PASS=<PASSWORD> python3 toshiba_ac_gui.py
+TOSHIBA_USER=<USER_NAME> TOSHIBA_PASS=<PASSWORD> python3 samples/toshiba_ac_gui.py
 ```
 
 ## Reporting issues
