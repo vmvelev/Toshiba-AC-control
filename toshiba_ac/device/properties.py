@@ -60,6 +60,7 @@ class ToshibaAcSwingMode(Enum):
     FIXED_3 = auto()
     FIXED_4 = auto()
     FIXED_5 = auto()
+    HADA = auto()
     NONE = None
 
 
