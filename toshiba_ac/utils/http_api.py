@@ -70,9 +70,10 @@ class ToshibaAcHttpApi:
     AC_STATE_PATH = "/api/AC/GetCurrentACState"
     AC_ENERGY_CONSUMPTION_PATH = "/api/AC/GetGroupACEnergyConsumption"
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(self, username: str, password: str, device_id: t.Optional[str] = None) -> None:
         self.username = username
         self.password = password
+        self.device_id = device_id or secrets.token_hex(8)
         self.access_token: t.Optional[str] = None
         self.access_token_type: t.Optional[str] = None
         self.consumer_id: t.Optional[str] = None
@@ -100,10 +101,8 @@ class ToshibaAcHttpApi:
         async with self._session_lock:
             if not self.session or self.session.closed:
                 timeout = aiohttp.ClientTimeout(total=20, connect=10, sock_read=15)
-                # Since ~2026-07-17 Toshiba's WAF returns 429 to any request missing a
-                # Device-ID header (any 16-hex value passes). Randomized per session so
-                # all users don't share one ID the WAF could throttle collectively.
-                self.session = aiohttp.ClientSession(timeout=timeout, headers={"Device-ID": secrets.token_hex(8)})
+                # Toshiba's app sends its stable Android ID with every request.
+                self.session = aiohttp.ClientSession(timeout=timeout, headers={"Device-ID": self.device_id})
 
     async def _refresh_auth_if_stale(self, failed_auth_generation: int) -> None:
         async with self._auth_lock:

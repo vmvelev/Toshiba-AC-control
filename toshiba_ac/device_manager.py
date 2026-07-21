@@ -47,7 +47,8 @@ class ToshibaAcDeviceManager:
         self.http_api: t.Optional[ToshibaAcHttpApi] = None
         self.reg_info = None
         self.amqp_api: t.Optional[ToshibaAcAmqpApi] = None
-        self.device_id = self.username + "_" + (device_id or "3e6e4eb5f0e5aa46")
+        self.http_device_id = device_id or "3e6e4eb5f0e5aa46"
+        self.device_id = self.username + "_" + self.http_device_id
         self.sas_token = sas_token
         self.devices: t.Dict[str, ToshibaAcDevice] = {}
         self.periodic_fetch_energy_consumption_task: t.Optional[asyncio.Task[None]] = None
@@ -59,7 +60,7 @@ class ToshibaAcDeviceManager:
         try:
             async with self.lock:
                 if not self.http_api:
-                    self.http_api = ToshibaAcHttpApi(self.username, self.password)
+                    self.http_api = ToshibaAcHttpApi(self.username, self.password, self.http_device_id)
                     await self.http_api.connect()
 
                 if not self.sas_token:
