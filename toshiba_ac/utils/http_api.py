@@ -26,6 +26,11 @@ from toshiba_ac.utils import RetryJitterMode, retry_on_exception
 
 logger = logging.getLogger(__name__)
 
+# Toshiba's WAF answers with 403, and its login rate limiter with 429. Both mean
+# "back off", so both must raise ToshibaAcHttpApiRateLimitError to reach the slow
+# rate-limit retry policy rather than the fast one meant for transient errors.
+RATE_LIMIT_STATUSES = frozenset({403, 429})
+
 
 @dataclass
 class ToshibaAcDeviceInfo:
@@ -188,9 +193,10 @@ class ToshibaAcHttpApi:
                     raise ToshibaAcHttpApiError(json["Message"])
 
             response_text = await response.text()
-            # 403 is Toshiba's WAF/rate-limit — expected and retried by the decorator above,
-            # and AMQP push keeps state fresh regardless, so keep it out of the default WARNING log.
-            level = logging.INFO if response.status == 403 else logging.WARNING
+            # 403 and 429 are Toshiba's WAF/rate-limit — expected and retried by the decorator
+            # above, and AMQP push keeps state fresh regardless, so keep them out of the default
+            # WARNING log.
+            level = logging.INFO if response.status in RATE_LIMIT_STATUSES else logging.WARNING
             logger.log(
                 level,
                 "Non-200 response from Toshiba API "
@@ -215,8 +221,8 @@ class ToshibaAcHttpApi:
 
                 raise ToshibaAcHttpApiAuthError(f"HTTP 401 calling {path}")
 
-            if response.status == 403:
-                raise ToshibaAcHttpApiRateLimitError(f"HTTP 403 calling {path}")
+            if response.status in RATE_LIMIT_STATUSES:
+                raise ToshibaAcHttpApiRateLimitError(f"HTTP {response.status} calling {path}")
 
             raise ToshibaAcHttpApiError(f"HTTP {response.status} calling {path}")
 
