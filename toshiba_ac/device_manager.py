@@ -33,7 +33,10 @@ class ToshibaAcSasTokenUpdatedCallback(ToshibaAcCallback[str]):
 
 
 class ToshibaAcDeviceManager:
-    FETCH_ENERGY_CONSUMPTION_PERIOD_MINUTES = 10
+    # Energy is a year-to-date cumulative total, and Home Assistant aggregates it into
+    # hourly statistics, so polling more often than hourly buys no resolution - it only
+    # multiplies our request footprint on Toshiba's rate-limited API.
+    FETCH_ENERGY_CONSUMPTION_PERIOD_MINUTES = 60
 
     def __init__(
         self,
