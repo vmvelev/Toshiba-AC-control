@@ -14,6 +14,7 @@ class StableDeviceIdTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(session)
         assert session is not None
         self.assertEqual(session.headers["Device-ID"], "0123456789abcdef")
+        self.assertEqual(session.headers["User-Agent"], "")
         await api.shutdown()
 
         await api._ensure_session()
@@ -21,6 +22,7 @@ class StableDeviceIdTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(session)
         assert session is not None
         self.assertEqual(session.headers["Device-ID"], "0123456789abcdef")
+        self.assertEqual(session.headers["User-Agent"], "")
         await api.shutdown()
 
     async def test_manager_passes_raw_device_id_to_http_api(self) -> None:

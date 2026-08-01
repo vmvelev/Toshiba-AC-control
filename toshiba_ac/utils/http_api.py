@@ -60,10 +60,6 @@ class ToshibaAcHttpApi:
     REQUEST_MIN_INTERVAL_S = 0.15
     REQUEST_JITTER_S = 0.25
     BASE_URL = "https://mobileapi.toshibahomeaccontrols.com"
-    USER_AGENT = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    )
     LOGIN_PATH = "/api/Consumer/Login"
     REGISTER_PATH = "/api/Consumer/RegisterMobileDevice"
     AC_MAPPING_PATH = "/api/AC/GetConsumerACMapping"
@@ -102,7 +98,13 @@ class ToshibaAcHttpApi:
             if not self.session or self.session.closed:
                 timeout = aiohttp.ClientTimeout(total=20, connect=10, sock_read=15)
                 # Toshiba's app sends its stable Android ID with every request.
-                self.session = aiohttp.ClientSession(timeout=timeout, headers={"Device-ID": self.device_id})
+                # Toshiba's energy endpoint rejects the browser-like User-Agent
+                # previously used by this library with HTTP 403. An empty value also
+                # prevents aiohttp from injecting its default User-Agent.
+                self.session = aiohttp.ClientSession(
+                    timeout=timeout,
+                    headers={"Device-ID": self.device_id, "User-Agent": ""},
+                )
 
     async def _refresh_auth_if_stale(self, failed_auth_generation: int) -> None:
         async with self._auth_lock:
@@ -147,7 +149,6 @@ class ToshibaAcHttpApi:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": self.access_token_type + " " + self.access_token,
-                "User-Agent": self.USER_AGENT,
             }
             is_authenticated_request = True
 
@@ -223,7 +224,6 @@ class ToshibaAcHttpApi:
     async def connect(self) -> None:
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": self.USER_AGENT,
         }
         post = {"Username": self.username, "Password": self.password}
 
@@ -322,15 +322,16 @@ class ToshibaAcHttpApi:
 
         ret = {}
 
-        try:
-            for ac in res:
-                try:
-                    consumption = sum(int(consumption["Energy"]) for consumption in ac["EnergyConsumption"])
-                    ret[ac["ACDeviceUniqueId"]] = ToshibaAcDeviceEnergyConsumption(consumption, since)
-                except (KeyError, ValueError):
-                    pass
-        except TypeError:
-            pass
+        for ac in res or []:
+            try:
+                energy_consumption = ac["EnergyConsumption"]
+                if not energy_consumption:
+                    continue
+
+                consumption = sum(int(item["Energy"]) for item in energy_consumption)
+                ret[ac["ACDeviceUniqueId"]] = ToshibaAcDeviceEnergyConsumption(consumption, since)
+            except (KeyError, TypeError, ValueError):
+                pass
 
         return ret
 
