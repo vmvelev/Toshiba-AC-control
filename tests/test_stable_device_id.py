@@ -25,6 +25,9 @@ class StableDeviceIdTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_manager_passes_raw_device_id_to_http_api(self) -> None:
         with patch("toshiba_ac.device_manager.ToshibaAcHttpApi") as http_api_class:
+            # No cached session, so connect() must perform a login.
+            http_api_class.return_value.access_token = None
+            http_api_class.return_value.consumer_id = None
             http_api_class.return_value.connect = AsyncMock(side_effect=RuntimeError)
             http_api_class.return_value.shutdown = AsyncMock()
             manager = ToshibaAcDeviceManager("user", "password", "0123456789abcdef")
@@ -32,7 +35,14 @@ class StableDeviceIdTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 await manager.connect()
 
-        http_api_class.assert_called_once_with("user", "password", "0123456789abcdef")
+        http_api_class.assert_called_once_with(
+            "user",
+            "password",
+            "0123456789abcdef",
+            access_token=None,
+            access_token_type=None,
+            consumer_id=None,
+        )
 
 
 if __name__ == "__main__":
