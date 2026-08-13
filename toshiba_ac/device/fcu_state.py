@@ -45,7 +45,23 @@ class ToshibaAcFcuState:
             return raw_to_temp[raw]
 
         @staticmethod
-        def to_raw(temperature: t.Optional[int]) -> int:
+        def to_raw(temperature: t.Optional[t.Union[int, float]]) -> int:
+            # Callers legitimately supply floats: Home Assistant's climate platform
+            # coerces the temperature attribute to float, external thermostats compute
+            # fractional setpoints, and float arithmetic yields values such as
+            # 21.999999999999986 for what is meant to be 22. The wire format encodes
+            # temperature as a single signed byte, so only whole degrees can be
+            # represented -- round to the nearest one instead of raising KeyError.
+            #
+            # Rounding is half-up (half away from zero for negatives) rather than
+            # round(), which uses banker's rounding: it sends an exact .5 to the
+            # nearest *even* integer, so 21.5 -> 22 but 22.5 -> 22, and 23.5 -> 24 but
+            # 24.5 -> 24. That avoids upward bias when summing many values, which is
+            # irrelevant for a one-shot setpoint and reads as inconsistent to a user
+            # asking for half a degree. Half-up keeps every .5 going the same way.
+            if temperature is not None and not isinstance(temperature, int):
+                temperature = int(temperature + 0.5) if temperature >= 0 else -int(-temperature + 0.5)
+
             temp_to_raw: t.Dict[t.Optional[int], int] = {i: i for i in range(-128, 128)}
             temp_to_raw.update({None: ToshibaAcFcuState.NONE_VAL_SIGNED, -1: 126})
             return temp_to_raw[temperature]
@@ -426,7 +442,7 @@ class ToshibaAcFcuState:
         return ToshibaAcFcuState.AcTemperature.from_raw(self._ac_temperature)
 
     @ac_temperature.setter
-    def ac_temperature(self, val: t.Optional[int]) -> None:
+    def ac_temperature(self, val: t.Optional[t.Union[int, float]]) -> None:
         self._ac_temperature = ToshibaAcFcuState.AcTemperature.to_raw(val)
 
     @property
