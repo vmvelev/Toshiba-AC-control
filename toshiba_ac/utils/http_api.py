@@ -26,6 +26,11 @@ from toshiba_ac.utils import RetryJitterMode, retry_on_exception
 
 logger = logging.getLogger(__name__)
 
+# Toshiba's WAF answers with 403, and its login rate limiter with 429. Both mean
+# "back off", so both must raise ToshibaAcHttpApiRateLimitError to reach the slow
+# rate-limit retry policy rather than the fast one meant for transient errors.
+RATE_LIMIT_STATUSES = frozenset({403, 429})
+
 
 @dataclass
 class ToshibaAcDeviceInfo:
@@ -60,23 +65,30 @@ class ToshibaAcHttpApi:
     REQUEST_MIN_INTERVAL_S = 0.15
     REQUEST_JITTER_S = 0.25
     BASE_URL = "https://mobileapi.toshibahomeaccontrols.com"
-    USER_AGENT = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    )
     LOGIN_PATH = "/api/Consumer/Login"
     REGISTER_PATH = "/api/Consumer/RegisterMobileDevice"
     AC_MAPPING_PATH = "/api/AC/GetConsumerACMapping"
     AC_STATE_PATH = "/api/AC/GetCurrentACState"
     AC_ENERGY_CONSUMPTION_PATH = "/api/AC/GetGroupACEnergyConsumption"
 
-    def __init__(self, username: str, password: str, device_id: t.Optional[str] = None) -> None:
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        device_id: t.Optional[str] = None,
+        access_token: t.Optional[str] = None,
+        access_token_type: t.Optional[str] = None,
+        consumer_id: t.Optional[str] = None,
+    ) -> None:
         self.username = username
         self.password = password
         self.device_id = device_id or secrets.token_hex(8)
-        self.access_token: t.Optional[str] = None
-        self.access_token_type: t.Optional[str] = None
-        self.consumer_id: t.Optional[str] = None
+        self.access_token: t.Optional[str] = access_token
+        self.access_token_type: t.Optional[str] = access_token_type
+        self.consumer_id: t.Optional[str] = consumer_id
+        # Called with (access_token, access_token_type, consumer_id) whenever a login
+        # produces a new session, so a consumer can persist it and skip the next login.
+        self.on_access_token_updated: t.Optional[t.Callable[[str, str, str], t.Awaitable[None]]] = None
         self.session: t.Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
         self._auth_lock = asyncio.Lock()
@@ -102,7 +114,13 @@ class ToshibaAcHttpApi:
             if not self.session or self.session.closed:
                 timeout = aiohttp.ClientTimeout(total=20, connect=10, sock_read=15)
                 # Toshiba's app sends its stable Android ID with every request.
-                self.session = aiohttp.ClientSession(timeout=timeout, headers={"Device-ID": self.device_id})
+                # Toshiba's energy endpoint rejects the browser-like User-Agent
+                # previously used by this library with HTTP 403. An empty value also
+                # prevents aiohttp from injecting its default User-Agent.
+                self.session = aiohttp.ClientSession(
+                    timeout=timeout,
+                    headers={"Device-ID": self.device_id, "User-Agent": ""},
+                )
 
     async def _refresh_auth_if_stale(self, failed_auth_generation: int) -> None:
         async with self._auth_lock:
@@ -147,7 +165,6 @@ class ToshibaAcHttpApi:
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": self.access_token_type + " " + self.access_token,
-                "User-Agent": self.USER_AGENT,
             }
             is_authenticated_request = True
 
@@ -188,9 +205,10 @@ class ToshibaAcHttpApi:
                     raise ToshibaAcHttpApiError(json["Message"])
 
             response_text = await response.text()
-            # 403 is Toshiba's WAF/rate-limit — expected and retried by the decorator above,
-            # and AMQP push keeps state fresh regardless, so keep it out of the default WARNING log.
-            level = logging.INFO if response.status == 403 else logging.WARNING
+            # 403 and 429 are Toshiba's WAF/rate-limit — expected and retried by the decorator
+            # above, and AMQP push keeps state fresh regardless, so keep them out of the default
+            # WARNING log.
+            level = logging.INFO if response.status in RATE_LIMIT_STATUSES else logging.WARNING
             logger.log(
                 level,
                 "Non-200 response from Toshiba API "
@@ -215,15 +233,14 @@ class ToshibaAcHttpApi:
 
                 raise ToshibaAcHttpApiAuthError(f"HTTP 401 calling {path}")
 
-            if response.status == 403:
-                raise ToshibaAcHttpApiRateLimitError(f"HTTP 403 calling {path}")
+            if response.status in RATE_LIMIT_STATUSES:
+                raise ToshibaAcHttpApiRateLimitError(f"HTTP {response.status} calling {path}")
 
             raise ToshibaAcHttpApiError(f"HTTP {response.status} calling {path}")
 
     async def connect(self) -> None:
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": self.USER_AGENT,
         }
         post = {"Username": self.username, "Password": self.password}
 
@@ -233,6 +250,9 @@ class ToshibaAcHttpApi:
         self.access_token_type = res["token_type"]
         self.consumer_id = res["consumerId"]
         self._auth_generation += 1
+
+        if self.on_access_token_updated and self.access_token and self.access_token_type and self.consumer_id:
+            await self.on_access_token_updated(self.access_token, self.access_token_type, self.consumer_id)
 
     async def shutdown(self) -> None:
         async with self._session_lock:
@@ -322,15 +342,16 @@ class ToshibaAcHttpApi:
 
         ret = {}
 
-        try:
-            for ac in res:
-                try:
-                    consumption = sum(int(consumption["Energy"]) for consumption in ac["EnergyConsumption"])
-                    ret[ac["ACDeviceUniqueId"]] = ToshibaAcDeviceEnergyConsumption(consumption, since)
-                except (KeyError, ValueError):
-                    pass
-        except TypeError:
-            pass
+        for ac in res or []:
+            try:
+                energy_consumption = ac["EnergyConsumption"]
+                if not energy_consumption:
+                    continue
+
+                consumption = sum(int(item["Energy"]) for item in energy_consumption)
+                ret[ac["ACDeviceUniqueId"]] = ToshibaAcDeviceEnergyConsumption(consumption, since)
+            except (KeyError, TypeError, ValueError):
+                pass
 
         return ret
 

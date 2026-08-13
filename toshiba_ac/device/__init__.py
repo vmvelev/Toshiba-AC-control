@@ -292,7 +292,9 @@ class ToshibaAcDevice:
 
         return ret
 
-    async def set_ac_temperature(self, val: t.Optional[int]) -> None:
+    async def set_ac_temperature(self, val: t.Optional[t.Union[int, float]]) -> None:
+        # Fractional values are accepted and rounded to the nearest whole degree;
+        # see ToshibaAcFcuState.AcTemperature.to_raw.
         state = ToshibaAcFcuState()
         state.ac_temperature = val
 
