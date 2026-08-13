@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 import struct
 import typing as t
 
@@ -29,6 +30,22 @@ from toshiba_ac.device.properties import (
     ToshibaAcStatus,
     ToshibaAcSwingMode,
 )
+
+logger = logging.getLogger(__name__)
+
+_Property = t.TypeVar("_Property")
+
+
+def _decode(field: str, mapping: t.Dict[int, _Property], raw: int, unknown: _Property) -> _Property:
+    # Toshiba keeps adding raw values for new hardware, and a KeyError here escapes
+    # through every state update and every read of the decoded property, which bricks
+    # the consumer until the AC happens to report a known value again. An unrecognised
+    # byte must degrade to "unknown", never take the connection down with it.
+    try:
+        return mapping[raw]
+    except KeyError:
+        logger.warning(f"Unknown {field} value 0x{raw:02x}, reporting {unknown}")
+        return unknown
 
 
 class ToshibaAcFcuState:
@@ -69,12 +86,17 @@ class ToshibaAcFcuState:
     class AcStatus:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcStatus:
-            return {
-                0x30: ToshibaAcStatus.ON,
-                0x31: ToshibaAcStatus.OFF,
-                0x02: ToshibaAcStatus.NONE,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcStatus.NONE,
-            }[raw]
+            return _decode(
+                "AcStatus",
+                {
+                    0x30: ToshibaAcStatus.ON,
+                    0x31: ToshibaAcStatus.OFF,
+                    0x02: ToshibaAcStatus.NONE,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcStatus.NONE,
+                },
+                raw,
+                ToshibaAcStatus.NONE,
+            )
 
         @staticmethod
         def to_raw(status: ToshibaAcStatus) -> int:
@@ -87,15 +109,20 @@ class ToshibaAcFcuState:
     class AcMode:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcMode:
-            return {
-                0x41: ToshibaAcMode.AUTO,
-                0x42: ToshibaAcMode.COOL,
-                0x43: ToshibaAcMode.HEAT,
-                0x44: ToshibaAcMode.DRY,
-                0x45: ToshibaAcMode.FAN,
-                0x00: ToshibaAcMode.NONE,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcMode.NONE,
-            }[raw]
+            return _decode(
+                "AcMode",
+                {
+                    0x41: ToshibaAcMode.AUTO,
+                    0x42: ToshibaAcMode.COOL,
+                    0x43: ToshibaAcMode.HEAT,
+                    0x44: ToshibaAcMode.DRY,
+                    0x45: ToshibaAcMode.FAN,
+                    0x00: ToshibaAcMode.NONE,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcMode.NONE,
+                },
+                raw,
+                ToshibaAcMode.NONE,
+            )
 
         @staticmethod
         def to_raw(mode: ToshibaAcMode) -> int:
@@ -111,17 +138,22 @@ class ToshibaAcFcuState:
     class AcFanMode:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcFanMode:
-            return {
-                0x41: ToshibaAcFanMode.AUTO,
-                0x31: ToshibaAcFanMode.QUIET,
-                0x32: ToshibaAcFanMode.LOW,
-                0x33: ToshibaAcFanMode.MEDIUM_LOW,
-                0x34: ToshibaAcFanMode.MEDIUM,
-                0x35: ToshibaAcFanMode.MEDIUM_HIGH,
-                0x36: ToshibaAcFanMode.HIGH,
-                0x00: ToshibaAcFanMode.NONE,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcFanMode.NONE,
-            }[raw]
+            return _decode(
+                "AcFanMode",
+                {
+                    0x41: ToshibaAcFanMode.AUTO,
+                    0x31: ToshibaAcFanMode.QUIET,
+                    0x32: ToshibaAcFanMode.LOW,
+                    0x33: ToshibaAcFanMode.MEDIUM_LOW,
+                    0x34: ToshibaAcFanMode.MEDIUM,
+                    0x35: ToshibaAcFanMode.MEDIUM_HIGH,
+                    0x36: ToshibaAcFanMode.HIGH,
+                    0x00: ToshibaAcFanMode.NONE,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcFanMode.NONE,
+                },
+                raw,
+                ToshibaAcFanMode.NONE,
+            )
 
         @staticmethod
         def to_raw(fan_mode: ToshibaAcFanMode) -> int:
@@ -139,20 +171,51 @@ class ToshibaAcFcuState:
     class AcSwingMode:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcSwingMode:
-            return {
-                0x31: ToshibaAcSwingMode.OFF,
-                0x41: ToshibaAcSwingMode.SWING_VERTICAL,
-                0x42: ToshibaAcSwingMode.SWING_HORIZONTAL,
-                0x43: ToshibaAcSwingMode.SWING_VERTICAL_AND_HORIZONTAL,
-                0x50: ToshibaAcSwingMode.FIXED_1,
-                0x51: ToshibaAcSwingMode.FIXED_2,
-                0x52: ToshibaAcSwingMode.FIXED_3,
-                0x53: ToshibaAcSwingMode.FIXED_4,
-                0x54: ToshibaAcSwingMode.FIXED_5,
-                0x60: ToshibaAcSwingMode.HADA,
-                0x00: ToshibaAcSwingMode.NONE,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcSwingMode.NONE,
-            }[raw]
+            # 2026 units (Shorai Curve) report the two vanes independently in one byte
+            # instead of picking a preset: 0x80 | horizontal << 3 | vertical, where each
+            # axis is 0 for none, 1-5 for fixed positions 1-5 and 6 for swinging. They
+            # still accept the legacy preset commands, so only decoding is needed here.
+            # ponytail: collapsed onto the legacy enum, which cannot express a fixed
+            # horizontal position - per-axis modes are Toshiba-AC-control#2.
+            vertical, horizontal = raw & 0x07, (raw & 0x38) >> 3
+            if 0x80 <= raw <= 0xB6 and vertical <= 0x06 and horizontal <= 0x06:
+                if vertical == 0x06:
+                    return (
+                        ToshibaAcSwingMode.SWING_VERTICAL_AND_HORIZONTAL
+                        if horizontal == 0x06
+                        else ToshibaAcSwingMode.SWING_VERTICAL
+                    )
+                if horizontal == 0x06:
+                    return ToshibaAcSwingMode.SWING_HORIZONTAL
+                if vertical:
+                    return [
+                        ToshibaAcSwingMode.FIXED_1,
+                        ToshibaAcSwingMode.FIXED_2,
+                        ToshibaAcSwingMode.FIXED_3,
+                        ToshibaAcSwingMode.FIXED_4,
+                        ToshibaAcSwingMode.FIXED_5,
+                    ][vertical - 1]
+                return ToshibaAcSwingMode.OFF
+
+            return _decode(
+                "AcSwingMode",
+                {
+                    0x31: ToshibaAcSwingMode.OFF,
+                    0x41: ToshibaAcSwingMode.SWING_VERTICAL,
+                    0x42: ToshibaAcSwingMode.SWING_HORIZONTAL,
+                    0x43: ToshibaAcSwingMode.SWING_VERTICAL_AND_HORIZONTAL,
+                    0x50: ToshibaAcSwingMode.FIXED_1,
+                    0x51: ToshibaAcSwingMode.FIXED_2,
+                    0x52: ToshibaAcSwingMode.FIXED_3,
+                    0x53: ToshibaAcSwingMode.FIXED_4,
+                    0x54: ToshibaAcSwingMode.FIXED_5,
+                    0x60: ToshibaAcSwingMode.HADA,
+                    0x00: ToshibaAcSwingMode.NONE,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcSwingMode.NONE,
+                },
+                raw,
+                ToshibaAcSwingMode.NONE,
+            )
 
         @staticmethod
         def to_raw(swing_mode: ToshibaAcSwingMode) -> int:
@@ -173,12 +236,17 @@ class ToshibaAcFcuState:
     class AcPowerSelection:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcPowerSelection:
-            return {
-                0x32: ToshibaAcPowerSelection.POWER_50,
-                0x4B: ToshibaAcPowerSelection.POWER_75,
-                0x64: ToshibaAcPowerSelection.POWER_100,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcPowerSelection.NONE,
-            }[raw]
+            return _decode(
+                "AcPowerSelection",
+                {
+                    0x32: ToshibaAcPowerSelection.POWER_50,
+                    0x4B: ToshibaAcPowerSelection.POWER_75,
+                    0x64: ToshibaAcPowerSelection.POWER_100,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcPowerSelection.NONE,
+                },
+                raw,
+                ToshibaAcPowerSelection.NONE,
+            )
 
         @staticmethod
         def to_raw(power_selection: ToshibaAcPowerSelection) -> int:
@@ -192,14 +260,19 @@ class ToshibaAcFcuState:
     class AcMeritB:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcMeritB:
-            return {
-                0x02: ToshibaAcMeritB.FIREPLACE_1,
-                0x03: ToshibaAcMeritB.FIREPLACE_2,
-                0x01: ToshibaAcMeritB.OFF,  # New value reported after update, nothing found in 3.4.0 APK version
-                0x00: ToshibaAcMeritB.OFF,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcMeritB.NONE,
-                ToshibaAcFcuState.NONE_VAL_HALF: ToshibaAcMeritB.NONE,
-            }[raw]
+            return _decode(
+                "AcMeritB",
+                {
+                    0x02: ToshibaAcMeritB.FIREPLACE_1,
+                    0x03: ToshibaAcMeritB.FIREPLACE_2,
+                    0x01: ToshibaAcMeritB.OFF,  # New value reported after update, nothing found in 3.4.0 APK version
+                    0x00: ToshibaAcMeritB.OFF,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcMeritB.NONE,
+                    ToshibaAcFcuState.NONE_VAL_HALF: ToshibaAcMeritB.NONE,
+                },
+                raw,
+                ToshibaAcMeritB.NONE,
+            )
 
         @staticmethod
         def to_raw(merit_b: ToshibaAcMeritB) -> int:
@@ -213,19 +286,24 @@ class ToshibaAcFcuState:
     class AcMeritA:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcMeritA:
-            return {
-                0x01: ToshibaAcMeritA.HIGH_POWER,
-                0x02: ToshibaAcMeritA.CDU_SILENT_1,
-                0x03: ToshibaAcMeritA.ECO,
-                0x04: ToshibaAcMeritA.HEATING_8C,
-                0x05: ToshibaAcMeritA.SLEEP_CARE,
-                0x06: ToshibaAcMeritA.FLOOR,
-                0x07: ToshibaAcMeritA.COMFORT,
-                0x0A: ToshibaAcMeritA.CDU_SILENT_2,
-                0x00: ToshibaAcMeritA.OFF,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcMeritA.NONE,
-                ToshibaAcFcuState.NONE_VAL_HALF: ToshibaAcMeritA.NONE,
-            }[raw]
+            return _decode(
+                "AcMeritA",
+                {
+                    0x01: ToshibaAcMeritA.HIGH_POWER,
+                    0x02: ToshibaAcMeritA.CDU_SILENT_1,
+                    0x03: ToshibaAcMeritA.ECO,
+                    0x04: ToshibaAcMeritA.HEATING_8C,
+                    0x05: ToshibaAcMeritA.SLEEP_CARE,
+                    0x06: ToshibaAcMeritA.FLOOR,
+                    0x07: ToshibaAcMeritA.COMFORT,
+                    0x0A: ToshibaAcMeritA.CDU_SILENT_2,
+                    0x00: ToshibaAcMeritA.OFF,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcMeritA.NONE,
+                    ToshibaAcFcuState.NONE_VAL_HALF: ToshibaAcMeritA.NONE,
+                },
+                raw,
+                ToshibaAcMeritA.NONE,
+            )
 
         @staticmethod
         def to_raw(merit_a: ToshibaAcMeritA) -> int:
@@ -245,11 +323,16 @@ class ToshibaAcFcuState:
     class AcAirPureIon:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcAirPureIon:
-            return {
-                0x18: ToshibaAcAirPureIon.ON,
-                0x10: ToshibaAcAirPureIon.OFF,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcAirPureIon.NONE,
-            }[raw]
+            return _decode(
+                "AcAirPureIon",
+                {
+                    0x18: ToshibaAcAirPureIon.ON,
+                    0x10: ToshibaAcAirPureIon.OFF,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcAirPureIon.NONE,
+                },
+                raw,
+                ToshibaAcAirPureIon.NONE,
+            )
 
         @staticmethod
         def to_raw(air_pure_ion: ToshibaAcAirPureIon) -> int:
@@ -262,11 +345,16 @@ class ToshibaAcFcuState:
     class AcSelfCleaning:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcSelfCleaning:
-            return {
-                0x18: ToshibaAcSelfCleaning.ON,
-                0x10: ToshibaAcSelfCleaning.OFF,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcSelfCleaning.NONE,
-            }[raw]
+            return _decode(
+                "AcSelfCleaning",
+                {
+                    0x18: ToshibaAcSelfCleaning.ON,
+                    0x10: ToshibaAcSelfCleaning.OFF,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcSelfCleaning.NONE,
+                },
+                raw,
+                ToshibaAcSelfCleaning.NONE,
+            )
 
         @staticmethod
         def to_raw(self_cleaning: ToshibaAcSelfCleaning) -> int:
@@ -279,11 +367,16 @@ class ToshibaAcFcuState:
     class AcWirelessLed:
         @staticmethod
         def from_raw(raw: int) -> ToshibaAcWirelessLed:
-            return {
-                0x01: ToshibaAcWirelessLed.ON,
-                0x02: ToshibaAcWirelessLed.OFF,
-                ToshibaAcFcuState.NONE_VAL: ToshibaAcWirelessLed.NONE,
-            }[raw]
+            return _decode(
+                "AcWirelessLed",
+                {
+                    0x01: ToshibaAcWirelessLed.ON,
+                    0x02: ToshibaAcWirelessLed.OFF,
+                    ToshibaAcFcuState.NONE_VAL: ToshibaAcWirelessLed.NONE,
+                },
+                raw,
+                ToshibaAcWirelessLed.NONE,
+            )
 
         @staticmethod
         def to_raw(wireless_led: ToshibaAcWirelessLed) -> int:
