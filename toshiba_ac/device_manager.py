@@ -32,6 +32,10 @@ class ToshibaAcSasTokenUpdatedCallback(ToshibaAcCallback[str]):
     pass
 
 
+class ToshibaAcAccessTokenUpdatedCallback(ToshibaAcCallback[t.Tuple[str, str, str]]):
+    """Fired with (access_token, access_token_type, consumer_id) after a successful login."""
+
+
 class ToshibaAcDeviceManager:
     # Energy is a year-to-date cumulative total, and Home Assistant aggregates it into
     # hourly statistics, so polling more often than hourly buys no resolution - it only
@@ -44,6 +48,9 @@ class ToshibaAcDeviceManager:
         password: str,
         device_id: t.Optional[str] = None,
         sas_token: t.Optional[str] = None,
+        access_token: t.Optional[str] = None,
+        access_token_type: t.Optional[str] = None,
+        consumer_id: t.Optional[str] = None,
     ):
         self.username = username
         self.password = password
@@ -53,18 +60,37 @@ class ToshibaAcDeviceManager:
         self.http_device_id = device_id or "3e6e4eb5f0e5aa46"
         self.device_id = self.username + "_" + self.http_device_id
         self.sas_token = sas_token
+        self.access_token = access_token
+        self.access_token_type = access_token_type
+        self.consumer_id = consumer_id
         self.devices: t.Dict[str, ToshibaAcDevice] = {}
         self.periodic_fetch_energy_consumption_task: t.Optional[asyncio.Task[None]] = None
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
         self._on_sas_token_updated_callback = ToshibaAcSasTokenUpdatedCallback()
+        self._on_access_token_updated_callback = ToshibaAcAccessTokenUpdatedCallback()
 
     async def connect(self) -> str:
         try:
             async with self.lock:
                 if not self.http_api:
-                    self.http_api = ToshibaAcHttpApi(self.username, self.password, self.http_device_id)
-                    await self.http_api.connect()
+                    self.http_api = ToshibaAcHttpApi(
+                        self.username,
+                        self.password,
+                        self.http_device_id,
+                        access_token=self.access_token,
+                        access_token_type=self.access_token_type,
+                        consumer_id=self.consumer_id,
+                    )
+                    self.http_api.on_access_token_updated = self._handle_access_token_updated
+
+                    # A cached session skips /api/Consumer/Login, which is the most
+                    # aggressively rate-limited endpoint on this API. If the token has
+                    # expired, request_api reauthenticates on the first 401 and retries.
+                    if self.http_api.access_token and self.http_api.consumer_id:
+                        logger.debug("Reusing cached access token, skipping login")
+                    else:
+                        await self.http_api.connect()
 
                 if not self.sas_token:
                     self.sas_token = await self.http_api.register_client(self.device_id)
@@ -260,6 +286,16 @@ class ToshibaAcDeviceManager:
 
         self._schedule_device_handler(source_id, "CMD_HEARTBEAT", device.handle_cmd_heartbeat(payload))
 
+    async def _handle_access_token_updated(self, access_token: str, access_token_type: str, consumer_id: str) -> None:
+        self.access_token = access_token
+        self.access_token_type = access_token_type
+        self.consumer_id = consumer_id
+        await self.on_access_token_updated_callback((access_token, access_token_type, consumer_id))
+
     @property
     def on_sas_token_updated_callback(self) -> ToshibaAcSasTokenUpdatedCallback:
         return self._on_sas_token_updated_callback
+
+    @property
+    def on_access_token_updated_callback(self) -> ToshibaAcAccessTokenUpdatedCallback:
+        return self._on_access_token_updated_callback

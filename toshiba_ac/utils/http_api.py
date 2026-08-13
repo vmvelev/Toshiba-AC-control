@@ -71,13 +71,24 @@ class ToshibaAcHttpApi:
     AC_STATE_PATH = "/api/AC/GetCurrentACState"
     AC_ENERGY_CONSUMPTION_PATH = "/api/AC/GetGroupACEnergyConsumption"
 
-    def __init__(self, username: str, password: str, device_id: t.Optional[str] = None) -> None:
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        device_id: t.Optional[str] = None,
+        access_token: t.Optional[str] = None,
+        access_token_type: t.Optional[str] = None,
+        consumer_id: t.Optional[str] = None,
+    ) -> None:
         self.username = username
         self.password = password
         self.device_id = device_id or secrets.token_hex(8)
-        self.access_token: t.Optional[str] = None
-        self.access_token_type: t.Optional[str] = None
-        self.consumer_id: t.Optional[str] = None
+        self.access_token: t.Optional[str] = access_token
+        self.access_token_type: t.Optional[str] = access_token_type
+        self.consumer_id: t.Optional[str] = consumer_id
+        # Called with (access_token, access_token_type, consumer_id) whenever a login
+        # produces a new session, so a consumer can persist it and skip the next login.
+        self.on_access_token_updated: t.Optional[t.Callable[[str, str, str], t.Awaitable[None]]] = None
         self.session: t.Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
         self._auth_lock = asyncio.Lock()
@@ -239,6 +250,9 @@ class ToshibaAcHttpApi:
         self.access_token_type = res["token_type"]
         self.consumer_id = res["consumerId"]
         self._auth_generation += 1
+
+        if self.on_access_token_updated and self.access_token and self.access_token_type and self.consumer_id:
+            await self.on_access_token_updated(self.access_token, self.access_token_type, self.consumer_id)
 
     async def shutdown(self) -> None:
         async with self._session_lock:
