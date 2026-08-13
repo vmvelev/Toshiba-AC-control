@@ -21,7 +21,7 @@ jobs:
     - name: Install mypy and toshiba-ac
       run: |
         pip install wheel
-        pip install mypy==1.11.1
+        pip install mypy==2.3.0
         pip install -e .
     - name: Check types
       run: mypy .
