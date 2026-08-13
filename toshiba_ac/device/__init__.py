@@ -31,8 +31,10 @@ from toshiba_ac.device.properties import (
     ToshibaAcMode,
     ToshibaAcPowerSelection,
     ToshibaAcSelfCleaning,
+    ToshibaAcHorizontalSwingMode,
     ToshibaAcStatus,
     ToshibaAcSwingMode,
+    ToshibaAcVerticalSwingMode,
     ToshibaAcWirelessLed,
 )
 from toshiba_ac.utils import async_sleep_until_next_multiply_of_minutes, pretty_enum_name, ToshibaAcCallback
@@ -79,6 +81,7 @@ class ToshibaAcDevice:
         self.cdu: t.Optional[str] = None
         self.fcu: t.Optional[str] = None
         self._supported = ToshibaAcFeatures.from_merit_string_and_model(merit_feature, ac_model_id)
+        self._seen_independent_swing = False
         self._on_state_changed_callback = ToshibaAcDeviceCallback()
         self._on_energy_consumption_changed_callback = ToshibaAcDeviceCallback()
         self._ac_energy_consumption: t.Optional[ToshibaAcDeviceEnergyConsumption] = None
@@ -121,6 +124,8 @@ class ToshibaAcDevice:
             await self.state_changed()
 
     async def state_changed(self) -> None:
+        if self.fcu_state.uses_independent_swing:
+            self._seen_independent_swing = True
         logger.info(f"[{self.name}] Current state: {self.fcu_state}")
         await self.on_state_changed_callback(self)
 
@@ -317,6 +322,45 @@ class ToshibaAcDevice:
     async def set_ac_swing_mode(self, val: ToshibaAcSwingMode) -> None:
         state = ToshibaAcFcuState()
         state.ac_swing_mode = val
+
+        await self.send_state_to_ac(state)
+
+    @property
+    def supports_independent_swing(self) -> bool:
+        # Sticky: units report legacy bytes again after receiving a legacy preset
+        # command, but the capability itself does not go away. Sending legacy
+        # commands successfully proves nothing (see #2), so observing the
+        # independent encoding at least once is the only reliable signal.
+        if not self._seen_independent_swing and self.fcu_state.uses_independent_swing:
+            self._seen_independent_swing = True
+        return self._seen_independent_swing
+
+    @property
+    def ac_vertical_swing_mode(self) -> ToshibaAcVerticalSwingMode:
+        return self.fcu_state.ac_vertical_swing_mode
+
+    async def set_ac_vertical_swing_mode(self, val: ToshibaAcVerticalSwingMode) -> None:
+        await self._set_independent_swing(val, self.ac_horizontal_swing_mode)
+
+    @property
+    def ac_horizontal_swing_mode(self) -> ToshibaAcHorizontalSwingMode:
+        return self.fcu_state.ac_horizontal_swing_mode
+
+    async def set_ac_horizontal_swing_mode(self, val: ToshibaAcHorizontalSwingMode) -> None:
+        await self._set_independent_swing(self.ac_vertical_swing_mode, val)
+
+    async def _set_independent_swing(
+        self, vertical: ToshibaAcVerticalSwingMode, horizontal: ToshibaAcHorizontalSwingMode
+    ) -> None:
+        if not self.supports_independent_swing:
+            logger.warning(
+                f"[{self.name}] Trying to set independent swing on a device that "
+                "has not reported the independent-axis encoding"
+            )
+            return
+
+        state = ToshibaAcFcuState()
+        state.set_ac_independent_swing(vertical, horizontal)
 
         await self.send_state_to_ac(state)
 
