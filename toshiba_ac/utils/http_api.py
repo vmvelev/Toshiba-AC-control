@@ -245,7 +245,7 @@ class ToshibaAcHttpApi:
         self.consumer_id = res["consumerId"]
         self._auth_generation += 1
 
-        if self.on_access_token_updated and self.access_token and self.consumer_id:
+        if self.on_access_token_updated and self.access_token and self.access_token_type and self.consumer_id:
             await self.on_access_token_updated(self.access_token, self.access_token_type, self.consumer_id)
 
     async def shutdown(self) -> None:

@@ -8,7 +8,7 @@ CACHED = ("cached-token", "Bearer", "consumer-1")
 
 
 class AccessTokenCacheTest(unittest.IsolatedAsyncioTestCase):
-    def _manager(self, **kwargs) -> ToshibaAcDeviceManager:
+    def _manager(self, **kwargs: str) -> ToshibaAcDeviceManager:
         return ToshibaAcDeviceManager("user", "password", "0123456789abcdef", **kwargs)
 
     async def test_seeded_session_skips_login(self) -> None:
