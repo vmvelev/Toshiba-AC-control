@@ -440,4 +440,14 @@ class ToshibaAcDevice:
 
     @property
     def supported(self) -> ToshibaAcFeatures:
+        # H.DA has no merit feature bit (Haori units report the same bits
+        # without the hardware), so it is learned from the unit reporting it,
+        # e.g. set once from the IR remote or the Toshiba app. Sticky like
+        # supports_independent_swing: observed once = supported.
+        if (
+            self.fcu_state.ac_swing_mode == ToshibaAcSwingMode.HADA
+            and ToshibaAcSwingMode.HADA not in self._supported.ac_swing_mode
+        ):
+            logger.info(f"[{self.name}] Detected H.DA support")
+            self._supported.ac_swing_mode.append(ToshibaAcSwingMode.HADA)
         return self._supported
