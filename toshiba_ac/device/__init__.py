@@ -71,6 +71,11 @@ class ToshibaAcDevice:
         self.ac_id = ac_id
         self.ac_unique_id = ac_unique_id
         self.firmware_version = firmware_version
+        # Kept for consumers that need model-specific behavior the feature
+        # bits cannot express, e.g. the 8C-mode temperature ceiling
+        # (vmvelev/home-assistant-toshiba_ac#35), and for diagnostics.
+        self.merit_feature = merit_feature
+        self.ac_model_id = ac_model_id
         self.amqp_api = amqp_api
         self.http_api = http_api
 
