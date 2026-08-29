@@ -204,9 +204,12 @@ class ToshibaAcHttpApi:
                     # (a wrong password with a valid username does NOT come back as
                     # InvalidUserNameorPassword), so also match the message text.
                     # Auth errors must never be retried: Toshiba counts every failed
-                    # login toward an account lockout.
-                    if json["StatusCode"] == "InvalidUserNameorPassword" or any(
-                        marker in message.lower() for marker in ("password", "lock")
+                    # login toward an account lockout. The message heuristic applies
+                    # to the login endpoint only - on data endpoints "lock" would
+                    # match transient messages like "blocked", turning a retryable
+                    # hiccup into a credentials failure.
+                    if json["StatusCode"] == "InvalidUserNameorPassword" or (
+                        path == self.LOGIN_PATH and any(marker in message.lower() for marker in ("password", "lock"))
                     ):
                         raise ToshibaAcHttpApiAuthError(message)
 
