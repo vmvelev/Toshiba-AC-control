@@ -41,7 +41,7 @@ def _session_returning_json(body: dict) -> MagicMock:
 
 
 class AuthErrorNoRetryTest(unittest.IsolatedAsyncioTestCase):
-    async def _call_login(self, status_code: str, message: str) -> MagicMock:
+    async def _call(self, path: str, status_code: str, message: str) -> MagicMock:
         api = ToshibaAcHttpApi("user", "password", "0123456789abcdef")
         session = _session_returning_json({"IsSuccess": False, "StatusCode": status_code, "Message": message})
         api.session = session
@@ -52,13 +52,16 @@ class AuthErrorNoRetryTest(unittest.IsolatedAsyncioTestCase):
         ):
             with self.assertRaises(ToshibaAcHttpApiError) as caught:
                 await api.request_api(
-                    api.LOGIN_PATH,
+                    path,
                     post={"Username": "user", "Password": "password"},
                     headers={"Content-Type": "application/json"},
                 )
 
         self.exception = caught.exception
         return session
+
+    async def _call_login(self, status_code: str, message: str) -> MagicMock:
+        return await self._call(ToshibaAcHttpApi.LOGIN_PATH, status_code, message)
 
     async def test_wrong_password_fails_fast(self) -> None:
         session = await self._call_login("InvalidPassword", WRONG_PASSWORD_MESSAGE)
@@ -80,6 +83,18 @@ class AuthErrorNoRetryTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_unrelated_api_error_keeps_the_generic_retry_policy(self) -> None:
         session = await self._call_login("SomethingElse", "Temporary server problem")
+
+        self.assertNotIsInstance(self.exception, ToshibaAcHttpApiAuthError)
+        self.assertEqual(session.post.call_count, GENERIC_ATTEMPTS)
+
+    async def test_non_login_endpoints_never_match_the_message_heuristic(self) -> None:
+        # "blocked" contains "lock"; a transient WAF-style error on a data endpoint
+        # must stay retryable instead of surfacing as a credentials failure.
+        session = await self._call(
+            ToshibaAcHttpApi.AC_STATE_PATH,
+            "RequestBlocked",
+            "Request temporarily blocked, please retry",
+        )
 
         self.assertNotIsInstance(self.exception, ToshibaAcHttpApiAuthError)
         self.assertEqual(session.post.call_count, GENERIC_ATTEMPTS)
