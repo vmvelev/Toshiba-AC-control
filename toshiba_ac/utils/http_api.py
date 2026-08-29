@@ -199,10 +199,18 @@ class ToshibaAcHttpApi:
                 if json["IsSuccess"]:
                     return json["ResObj"]
                 else:
-                    if json["StatusCode"] == "InvalidUserNameorPassword":
-                        raise ToshibaAcHttpApiAuthError(json["Message"])
+                    message = json.get("Message") or ""
+                    # Toshiba reports bad credentials under more than one StatusCode
+                    # (a wrong password with a valid username does NOT come back as
+                    # InvalidUserNameorPassword), so also match the message text.
+                    # Auth errors must never be retried: Toshiba counts every failed
+                    # login toward an account lockout.
+                    if json["StatusCode"] == "InvalidUserNameorPassword" or any(
+                        marker in message.lower() for marker in ("password", "lock")
+                    ):
+                        raise ToshibaAcHttpApiAuthError(message)
 
-                    raise ToshibaAcHttpApiError(json["Message"])
+                    raise ToshibaAcHttpApiError(message)
 
             response_text = await response.text()
             # 403 and 429 are Toshiba's WAF/rate-limit — expected and retried by the decorator
