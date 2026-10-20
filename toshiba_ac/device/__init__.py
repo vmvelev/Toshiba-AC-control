@@ -150,8 +150,30 @@ class ToshibaAcDevice:
             await self.state_changed()
 
     async def handle_cmd_heartbeat(self, payload: dict[str, t.Any]) -> None:
-        # Use signed conversion for temperatures, unsigned otherwise.
-        hb_data = {k: struct.unpack("b" if "Temp" in k else "B", bytes.fromhex(v))[0] for k, v in payload.items()}
+        # Every heartbeat value is a single hex byte, but the cloud can send an
+        # empty or otherwise malformed value ("Power" was observed empty).
+        # Decoding the whole payload at once then raises and the entire message
+        # is lost, so every value is decoded on its own and only the malformed
+        # ones are dropped. Use signed conversion for temperatures, unsigned
+        # otherwise.
+        hb_data: dict[str, int] = {}
+        dropped: list[str] = []
+        for key, value in payload.items():
+            try:
+                raw = bytes.fromhex(value)
+                if len(raw) != 1:
+                    raise ValueError(f"expected 1 byte, got {len(raw)}")
+                hb_data[key] = struct.unpack("b" if "Temp" in key else "B", raw)[0]
+            except (TypeError, ValueError, struct.error):
+                dropped.append(key)
+
+        if dropped:
+            logger.debug(f"[{self.name}] AC heartbeat: dropped malformed values: {dropped}")
+
+        if not hb_data:
+            logger.debug(f"[{self.name}] AC heartbeat with no valid values, ignoring")
+            return
+
         logger.debug(f"[{self.name}] AC heartbeat from AMQP: {hb_data}")
 
         if self.fcu_state.update_from_hbt(hb_data):
