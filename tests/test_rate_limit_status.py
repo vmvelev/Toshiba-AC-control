@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# toshiba_ac.utils.http_api and toshiba_ac.device import each other, so importing
+# toshiba_ac_community.utils.http_api and toshiba_ac_community.device import each other, so importing
 # http_api first raises ImportError. Import the device package ahead of it, the same
 # order the library itself is used in.
-import toshiba_ac.device_manager  # noqa: F401
-from toshiba_ac.utils.http_api import (
+import toshiba_ac_community.device_manager  # noqa: F401
+from toshiba_ac_community.utils.http_api import (
     ToshibaAcHttpApi,
     ToshibaAcHttpApiError,
     ToshibaAcHttpApiRateLimitError,
@@ -44,8 +44,8 @@ class RateLimitStatusTest(unittest.IsolatedAsyncioTestCase):
         # The retry decorators sleep between attempts; we only care about how many
         # attempts each policy makes, not about waiting through the backoff.
         with (
-            patch("toshiba_ac.utils.asyncio.sleep", AsyncMock()),
-            patch("toshiba_ac.utils.http_api.asyncio.sleep", AsyncMock()),
+            patch("toshiba_ac_community.utils.asyncio.sleep", AsyncMock()),
+            patch("toshiba_ac_community.utils.http_api.asyncio.sleep", AsyncMock()),
         ):
             with self.assertRaises(ToshibaAcHttpApiError) as caught:
                 await api.request_api(

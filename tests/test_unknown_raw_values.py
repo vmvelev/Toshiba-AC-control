@@ -1,7 +1,7 @@
 import unittest
 
-from toshiba_ac.device.fcu_state import ToshibaAcFcuState
-from toshiba_ac.device.properties import ToshibaAcFanMode, ToshibaAcSwingMode
+from toshiba_ac_community.device.fcu_state import ToshibaAcFcuState
+from toshiba_ac_community.device.properties import ToshibaAcFanMode, ToshibaAcSwingMode
 
 # Reported by a 2026 Shorai Curve: swing byte 0x81, which no legacy table knows.
 SHORAI_CURVE_STATE = "30421941816400101717fe0200001002000000"

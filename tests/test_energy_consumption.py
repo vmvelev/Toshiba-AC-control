@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from toshiba_ac.device_manager import ToshibaAcDeviceManager  # noqa: F401
-from toshiba_ac.utils.http_api import ToshibaAcHttpApi
+from toshiba_ac_community.device_manager import ToshibaAcDeviceManager  # noqa: F401
+from toshiba_ac_community.utils.http_api import ToshibaAcHttpApi
 
 
 class EnergyConsumptionTest(unittest.IsolatedAsyncioTestCase):

@@ -30,7 +30,7 @@ Homepage = "https://github.com/vmvelev/Toshiba-AC-control"
 "Bug Tracker" = "https://github.com/vmvelev/Toshiba-AC-control/issues"
 
 [tool.setuptools.packages.find]
-include = ["toshiba_ac*"]
+include = ["toshiba_ac_community*"]
 
 [tool.setuptools_scm]
 # version derived from git tags (tag prefix "v"); no version file vendored

@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock
 
-from toshiba_ac.device import ToshibaAcDevice
+from toshiba_ac_community.device import ToshibaAcDevice
 
 # A state reported by a real unit; the indoor/outdoor temperatures it carries
 # are both 23, so a heartbeat that reports other values is visible as a change.

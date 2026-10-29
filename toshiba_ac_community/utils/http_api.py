@@ -21,8 +21,8 @@ import typing as t
 from dataclasses import dataclass
 
 import aiohttp
-from toshiba_ac.device.properties import ToshibaAcDeviceEnergyConsumption
-from toshiba_ac.utils import RetryJitterMode, retry_on_exception
+from toshiba_ac_community.device.properties import ToshibaAcDeviceEnergyConsumption
+from toshiba_ac_community.utils import RetryJitterMode, retry_on_exception
 
 logger = logging.getLogger(__name__)
 

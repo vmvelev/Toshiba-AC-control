@@ -19,7 +19,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 
-from toshiba_ac.device.properties import (
+from toshiba_ac_community.device.properties import (
     ToshibaAcAirPureIon,
     ToshibaAcFanMode,
     ToshibaAcMeritA,
@@ -29,9 +29,9 @@ from toshiba_ac.device.properties import (
     ToshibaAcStatus,
     ToshibaAcSwingMode,
 )
-from toshiba_ac.device_manager import ToshibaAcDeviceManager
+from toshiba_ac_community.device_manager import ToshibaAcDeviceManager
 
-toshiba_logger = logging.getLogger("toshiba_ac")
+toshiba_logger = logging.getLogger("toshiba_ac_community")
 logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(levelname)-8s %(name)s: %(message)s")
 toshiba_logger.setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
