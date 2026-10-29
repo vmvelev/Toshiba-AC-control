@@ -1,6 +1,6 @@
 import unittest
 
-from toshiba_ac.device.fcu_state import ToshibaAcFcuState
+from toshiba_ac_community.device.fcu_state import ToshibaAcFcuState
 
 
 class AcTemperatureToRawTest(unittest.TestCase):

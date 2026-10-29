@@ -18,7 +18,7 @@ import logging
 import struct
 import typing as t
 
-from toshiba_ac.device.properties import (
+from toshiba_ac_community.device.properties import (
     ToshibaAcAirPureIon,
     ToshibaAcFanMode,
     ToshibaAcMeritA,

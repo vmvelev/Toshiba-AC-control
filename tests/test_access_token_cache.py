@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from toshiba_ac.device_manager import ToshibaAcDeviceManager
-from toshiba_ac.utils.http_api import ToshibaAcHttpApi
+from toshiba_ac_community.device_manager import ToshibaAcDeviceManager
+from toshiba_ac_community.utils.http_api import ToshibaAcHttpApi
 
 CACHED = ("cached-token", "Bearer", "consumer-1")
 
@@ -18,7 +18,7 @@ class AccessTokenCacheTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(ToshibaAcHttpApi, "connect", AsyncMock()) as login,
             patch.object(ToshibaAcHttpApi, "register_client", AsyncMock(return_value="sas")),
-            patch("toshiba_ac.device_manager.ToshibaAcAmqpApi") as amqp,
+            patch("toshiba_ac_community.device_manager.ToshibaAcAmqpApi") as amqp,
         ):
             amqp.return_value.connect = AsyncMock()
             await manager.connect()
@@ -34,7 +34,7 @@ class AccessTokenCacheTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(ToshibaAcHttpApi, "connect", AsyncMock()) as login,
             patch.object(ToshibaAcHttpApi, "register_client", AsyncMock(return_value="sas")),
-            patch("toshiba_ac.device_manager.ToshibaAcAmqpApi") as amqp,
+            patch("toshiba_ac_community.device_manager.ToshibaAcAmqpApi") as amqp,
         ):
             amqp.return_value.connect = AsyncMock()
             await manager.connect()
@@ -48,7 +48,7 @@ class AccessTokenCacheTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(ToshibaAcHttpApi, "connect", AsyncMock()),
             patch.object(ToshibaAcHttpApi, "register_client", AsyncMock(return_value="fresh-sas")) as register,
-            patch("toshiba_ac.device_manager.ToshibaAcAmqpApi") as amqp,
+            patch("toshiba_ac_community.device_manager.ToshibaAcAmqpApi") as amqp,
         ):
             amqp.return_value.connect = AsyncMock()
             await manager.connect()

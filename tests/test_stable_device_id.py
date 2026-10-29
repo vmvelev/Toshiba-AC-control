@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from toshiba_ac.device_manager import ToshibaAcDeviceManager
-from toshiba_ac.utils.http_api import ToshibaAcHttpApi
+from toshiba_ac_community.device_manager import ToshibaAcDeviceManager
+from toshiba_ac_community.utils.http_api import ToshibaAcHttpApi
 
 
 class StableDeviceIdTest(unittest.IsolatedAsyncioTestCase):
@@ -26,7 +26,7 @@ class StableDeviceIdTest(unittest.IsolatedAsyncioTestCase):
         await api.shutdown()
 
     async def test_manager_passes_raw_device_id_to_http_api(self) -> None:
-        with patch("toshiba_ac.device_manager.ToshibaAcHttpApi") as http_api_class:
+        with patch("toshiba_ac_community.device_manager.ToshibaAcHttpApi") as http_api_class:
             # No cached session, so connect() must perform a login.
             http_api_class.return_value.access_token = None
             http_api_class.return_value.consumer_id = None

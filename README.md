@@ -7,7 +7,7 @@
 
 Python library to control Toshiba AC units over Toshiba's cloud service - HTTP login, device discovery, and real-time state updates over AMQP.
 
-This is the community-maintained protocol library behind the [Toshiba AC (Community)](https://github.com/vmvelev/home-assistant-toshiba_ac) Home Assistant integration. It is published on PyPI as **`toshiba-ac-community`**; the Python import name is `toshiba_ac`.
+This is the community-maintained protocol library behind the [Toshiba AC (Community)](https://github.com/vmvelev/home-assistant-toshiba_ac) Home Assistant integration. It is published on PyPI as **`toshiba-ac-community`**; the Python import name is `toshiba_ac_community`. Before 0.8.0 it was `toshiba_ac`; it was renamed so it no longer clashes with the upstream `toshiba-ac` package when both are installed.
 
 Originally created by [Kamil Sroka (KaSroka)](https://github.com/KaSroka/Toshiba-AC-control) - full credit for the protocol work. This repository is maintained independently so fixes and improvements can ship on their own schedule.
 
@@ -36,7 +36,7 @@ Requires Python 3.10 or newer.
 ```python
 import asyncio
 
-from toshiba_ac.device_manager import ToshibaAcDeviceManager
+from toshiba_ac_community.device_manager import ToshibaAcDeviceManager
 
 
 async def main():

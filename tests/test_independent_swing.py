@@ -1,7 +1,7 @@
 import unittest
 
-from toshiba_ac.device.fcu_state import ToshibaAcFcuState
-from toshiba_ac.device.properties import (
+from toshiba_ac_community.device.fcu_state import ToshibaAcFcuState
+from toshiba_ac_community.device.properties import (
     ToshibaAcHorizontalSwingMode,
     ToshibaAcSwingMode,
     ToshibaAcVerticalSwingMode,
